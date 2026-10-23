@@ -10,14 +10,16 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(30) NULL,
   role ENUM('client', 'employee', 'admin') NOT NULL DEFAULT 'client',
   active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT chk_users_active CHECK (active IN (0, 1))
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS service_categories (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL UNIQUE,
   description VARCHAR(255) NULL,
-  active TINYINT(1) NOT NULL DEFAULT 1
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT chk_service_categories_active CHECK (active IN (0, 1))
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS services (
@@ -28,6 +30,10 @@ CREATE TABLE IF NOT EXISTS services (
   duration SMALLINT UNSIGNED NOT NULL,
   price DECIMAL(10,2) NOT NULL,
   active TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT uq_services_category_name UNIQUE (category_id, name),
+  CONSTRAINT chk_services_duration CHECK (duration > 0),
+  CONSTRAINT chk_services_price CHECK (price >= 0),
+  CONSTRAINT chk_services_active CHECK (active IN (0, 1)),
   CONSTRAINT fk_services_category FOREIGN KEY (category_id) REFERENCES service_categories(id)
 ) ENGINE=InnoDB;
 
@@ -36,6 +42,7 @@ CREATE TABLE IF NOT EXISTS employees (
   user_id INT UNSIGNED NOT NULL UNIQUE,
   description VARCHAR(255) NULL,
   active TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT chk_employees_active CHECK (active IN (0, 1)),
   CONSTRAINT fk_employees_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB;
 
@@ -43,6 +50,7 @@ CREATE TABLE IF NOT EXISTS employee_services (
   employee_id INT UNSIGNED NOT NULL,
   service_id INT UNSIGNED NOT NULL,
   PRIMARY KEY (employee_id, service_id),
+  INDEX idx_employee_services_service (service_id, employee_id),
   CONSTRAINT fk_employee_services_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
   CONSTRAINT fk_employee_services_service FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -54,8 +62,15 @@ CREATE TABLE IF NOT EXISTS employee_availability (
   available_date DATE NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
+  UNIQUE KEY uq_availability_weekly (employee_id, day_of_week, start_time, end_time),
+  UNIQUE KEY uq_availability_date (employee_id, available_date, start_time, end_time),
+  CONSTRAINT chk_availability_schedule CHECK (
+    (day_of_week IS NOT NULL AND day_of_week BETWEEN 1 AND 7 AND available_date IS NULL)
+    OR (day_of_week IS NULL AND available_date IS NOT NULL)
+  ),
+  CONSTRAINT chk_availability_time CHECK (end_time > start_time),
   CONSTRAINT fk_availability_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-  CONSTRAINT chk_availability_day CHECK (day_of_week BETWEEN 1 AND 7 OR available_date IS NOT NULL)
+  INDEX idx_availability_date_employee (available_date, employee_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS reservations (
@@ -69,9 +84,11 @@ CREATE TABLE IF NOT EXISTS reservations (
   status ENUM('pending', 'confirmed', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
   comment TEXT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT chk_reservations_time CHECK (end_time > start_time),
   CONSTRAINT fk_reservations_user FOREIGN KEY (user_id) REFERENCES users(id),
   CONSTRAINT fk_reservations_employee FOREIGN KEY (employee_id) REFERENCES employees(id),
   CONSTRAINT fk_reservations_service FOREIGN KEY (service_id) REFERENCES services(id),
+  CONSTRAINT fk_reservations_employee_service FOREIGN KEY (employee_id, service_id) REFERENCES employee_services(employee_id, service_id),
   INDEX idx_reservations_employee_time (employee_id, reservation_date, start_time, end_time),
   INDEX idx_reservations_user (user_id)
 ) ENGINE=InnoDB;
@@ -81,10 +98,10 @@ INSERT INTO service_categories (name, description) VALUES
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 INSERT INTO users (name, surname, email, password, phone, role) VALUES
-  ('Anna', 'Kowalska', 'anna@rezerwuj.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llCqI1i7F7n6mO4s1QwG2', '500600700', 'employee'),
-  ('Piotr', 'Nowak', 'piotr@rezerwuj.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llCqI1i7F7n6mO4s1QwG2', '500600701', 'employee'),
-  ('Administrator', 'Systemu', 'admin@rezerwuj.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llCqI1i7F7n6mO4s1QwG2', NULL, 'admin')
-ON DUPLICATE KEY UPDATE name = VALUES(name), surname = VALUES(surname);
+  ('Anna', 'Kowalska', 'anna@rezerwuj.local', '$2y$12$ObpEjWfyMHGo1F0WD8eR6OYcF7IilBmRc7WFNumDTqPosoEaAvptS', '500600700', 'employee'),
+  ('Piotr', 'Nowak', 'piotr@rezerwuj.local', '$2y$12$ObpEjWfyMHGo1F0WD8eR6OYcF7IilBmRc7WFNumDTqPosoEaAvptS', '500600701', 'employee'),
+  ('Administrator', 'Systemu', 'admin@rezerwuj.local', '$2y$12$ObpEjWfyMHGo1F0WD8eR6OYcF7IilBmRc7WFNumDTqPosoEaAvptS', NULL, 'admin')
+ON DUPLICATE KEY UPDATE name = VALUES(name), surname = VALUES(surname), password = VALUES(password);
 
 INSERT INTO services (category_id, name, description, duration, price) SELECT id, 'Strzyżenie damskie', 'Cięcie, modelowanie i pielęgnacja dopasowana do Twoich potrzeb.', 60, 80.00 FROM service_categories WHERE name = 'Fryzjerstwo' AND NOT EXISTS (SELECT 1 FROM services WHERE name = 'Strzyżenie damskie');
 INSERT INTO services (category_id, name, description, duration, price) SELECT id, 'Strzyżenie męskie', 'Precyzyjne cięcie i stylizacja w wygodnym dla Ciebie terminie.', 30, 50.00 FROM service_categories WHERE name = 'Fryzjerstwo' AND NOT EXISTS (SELECT 1 FROM services WHERE name = 'Strzyżenie męskie');
