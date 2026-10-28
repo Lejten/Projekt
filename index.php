@@ -1,29 +1,22 @@
 <?php
 declare(strict_types=1);
 
-$config = require __DIR__ . '/config.php';
+require __DIR__ . '/app.php';
 $services = [];
-$employees = [];
+$currentUser = null;
+$databaseAvailable = true;
 
 try {
-  $db = new PDO(
-    "mysql:host={$config['host']};port={$config['port']};dbname={$config['name']};charset=utf8mb4",
-    $config['user'],
-    $config['password'],
-    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
-  );
+  $db = database();
+  $currentUser = current_user($db);
   $services = $db->query('SELECT id, name, description, duration, price FROM services WHERE active = 1 ORDER BY id')->fetchAll();
-  $employees = $db->query("SELECT e.id, CONCAT(u.name, ' ', u.surname) AS full_name FROM employees e JOIN users u ON u.id = e.user_id WHERE e.active = 1 AND u.active = 1 ORDER BY u.surname, u.name")->fetchAll();
 } catch (PDOException $exception) {
+  $currentUser = null;
+  $databaseAvailable = false;
   $services = [
     ['id' => 1, 'name' => 'Strzyżenie damskie', 'description' => 'Cięcie, modelowanie i pielęgnacja dopasowana do Twoich potrzeb.', 'duration' => 60, 'price' => 80],
     ['id' => 2, 'name' => 'Strzyżenie męskie', 'description' => 'Precyzyjne cięcie i stylizacja w wygodnym dla Ciebie terminie.', 'duration' => 30, 'price' => 50],
     ['id' => 3, 'name' => 'Koloryzacja', 'description' => 'Odśwież kolor lub zmień swój look z pomocą specjalisty.', 'duration' => 120, 'price' => 150],
-  ];
-  $employees = [
-    ['id' => 1, 'full_name' => 'Dowolny dostępny'],
-    ['id' => 2, 'full_name' => 'Anna Kowalska'],
-    ['id' => 3, 'full_name' => 'Piotr Nowak'],
   ];
 }
 
@@ -50,12 +43,23 @@ $serviceSymbols = ['&#10024;', '&#10022;', '&#10047;'];
         <a href="#uslugi">Usługi</a>
         <a href="#jak-dziala">Jak to działa</a>
         <a href="#role">Strefy użytkownika</a>
-        <a class="nav-button" href="#rezerwacja">Zarezerwuj termin</a>
+        <?php if ($currentUser !== null): ?>
+          <a href="dashboard.php">Panel</a>
+          <a href="profile.php">Mój profil</a>
+          <form action="logout.php" method="post" class="nav-logout">
+            <input type="hidden" name="csrf_token" value="<?= escape(csrf_token()) ?>">
+            <button type="submit" class="nav-button">Wyloguj</button>
+          </form>
+        <?php else: ?>
+          <a href="login.php">Logowanie</a>
+          <a class="nav-button" href="register.php">Załóż konto</a>
+        <?php endif; ?>
       </nav>
     </div>
   </header>
 
   <main>
+    <?php if (!$databaseAvailable): ?><div class="container"><p class="flash-message error" role="status">Baza danych jest niedostępna. Wyświetlam ofertę demonstracyjną; logowanie i rejestracja wymagają aktywnego połączenia z bazą.</p></div><?php endif; ?>
     <section class="hero" id="start">
       <div class="container hero-grid">
         <div class="hero-copy">
@@ -120,10 +124,16 @@ $serviceSymbols = ['&#10024;', '&#10022;', '&#10047;'];
     </section>
 
     <section class="section booking" id="rezerwacja">
-      <div class="container booking-grid"><div><p class="eyebrow">Zacznij tutaj</p><h2>Zarezerwuj swój termin</h2><p>Wybierz usługę, pracownika i dogodną godzinę. Zajmie Ci to tylko chwilę.</p></div><form class="booking-form" action="#" method="post"><label>Usługa<select name="service"><option>Wybierz usługę</option><?php foreach ($services as $service): ?><option value="<?= (int) $service['id'] ?>"><?= htmlspecialchars($service['name'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><label>Pracownik<select name="employee"><?php foreach ($employees as $employee): ?><option value="<?= (int) $employee['id'] ?>"><?= htmlspecialchars($employee['full_name'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?></select></label><div class="form-row"><label>Data<input type="date" name="date"></label><label>Godzina<select name="time"><option>Wybierz godzinę</option><option>14:30</option><option>15:30</option><option>16:30</option></select></label></div><label>Uwagi <span class="optional">(opcjonalnie)</span><textarea name="message" rows="3" placeholder="Napisz, jeśli chcesz coś dodać..."></textarea></label><button class="button button-primary" type="submit">Sprawdź dostępność <span aria-hidden="true">&#8594;</span></button></form></div>
+      <div class="container booking-grid">
+        <div><p class="eyebrow">Zacznij tutaj</p><h2>Zarezerwuj swój termin</h2><p>Rezerwacje online będą dostępne po wdrożeniu kolejnego etapu. Już teraz możesz utworzyć konto i zalogować się do swojego panelu.</p></div>
+        <div class="booking-form booking-actions">
+          <a class="button button-primary" href="<?= $currentUser !== null ? 'dashboard.php' : 'register.php' ?>"><?= $currentUser !== null ? 'Przejdź do panelu' : 'Utwórz konto' ?></a>
+          <?php if ($currentUser === null): ?><a class="text-link" href="login.php">Mam już konto - zaloguj się</a><?php endif; ?>
+        </div>
+      </div>
     </section>
   </main>
 
-  <footer class="site-footer"><div class="container footer-wrap"><div><a class="brand" href="#start"><span class="brand-mark">R</span><span>rezerwuj<span class="brand-dot">.</span></span></a><p>Prosty system rezerwacji usług.</p></div><div class="footer-links"><a href="#uslugi">Usługi</a><a href="#jak-dziala">Jak to działa</a><a href="#role">Dla użytkowników</a><a href="#rezerwacja">Kontakt</a></div></div><div class="container footer-bottom"><span>&copy; 2026 Rezerwuj</span><span>Wszystkie prawa zastrzeżone</span></div></footer>
+  <footer class="site-footer"><div class="container footer-wrap"><div><a class="brand" href="#start"><span class="brand-mark">R</span><span>rezerwuj<span class="brand-dot">.</span></span></a><p>Prosty system rezerwacji usług.</p></div><div class="footer-links"><a href="#uslugi">Usługi</a><a href="#jak-dziala">Jak to działa</a><a href="#role">Dla użytkowników</a><a href="#rezerwacja">Kontakt</a></div></div><div class="container footer-bottom"><span>&copy; <?= date('Y') ?> Rezerwuj</span><span>Wszystkie prawa zastrzeżone</span></div></footer>
 </body>
 </html>

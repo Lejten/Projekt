@@ -2,7 +2,7 @@
 
 **Autor:** Dominik Siwiński.
 
-Projekt semestralny: aplikacja internetowa do przeglądania oferty salonu i rezerwacji usług. Aktualny zakres obejmuje responsywną stronę oferty, relacyjny model danych i instalator bazy; logowanie oraz zapis rezerwacji z formularza będą rozwijane w kolejnych etapach.
+Projekt semestralny: aplikacja internetowa do przeglądania oferty salonu i rezerwacji usług. Aplikacja obsługuje konta klientów, logowanie i wylogowanie, panele użytkowników, edycję profilu oraz rezerwowanie wizyt w oparciu o dostępność pracowników.
 
 ## Technologie
 
@@ -16,6 +16,10 @@ Projekt semestralny: aplikacja internetowa do przeglądania oferty salonu i reze
 - `index.php` - strona główna i oferta usług pobierana z bazy (z demonstracyjną ofertą zastępczą, gdy baza jest niedostępna)
 - `style.css` - responsywne style strony
 - `config.php` - konfiguracja połączenia z bazą z użyciem zmiennych środowiskowych
+- `app.php` - współdzielone połączenie z bazą, obsługa sesji, CSRF i autoryzacji
+- `register.php`, `login.php`, `logout.php` - rejestracja i obsługa sesji użytkownika
+- `dashboard.php`, `profile.php` - chroniony panel klienta, pracownika i administratora; rezerwacja wizyt oraz edycja profilu
+- `partials/` - współdzielony nagłówek i stopka stron
 - `setup.php` - instalator bazy danych i danych startowych
 - `database/database.sql` - schemat relacyjny oraz dane demonstracyjne
 - `database/ERD.md` - diagram relacji encji
@@ -53,8 +57,13 @@ Po uruchomieniu instalatora baza zawiera konta testowe:
 | Pracownik | `anna@rezerwuj.local` | `Rezerwuj123!` |
 | Pracownik | `piotr@rezerwuj.local` | `Rezerwuj123!` |
 
-Hasła są zapisane w bazie jako hashe. Konta i hasła są przeznaczone wyłącznie do lokalnych danych demonstracyjnych. Formularz logowania nie jest jeszcze częścią aktualnej wersji.
 
 ## Baza danych
 
 Schemat, opis relacji i diagram ERD są dostępne w katalogu [`database`](database/README.md). Schemat obejmuje użytkowników, kategorie i usługi, pracowników, dostępność oraz rezerwacje. Ograniczenia bazy pilnują poprawnych czasów, unikalnych przypisań i zgodności usługi z pracownikiem.
+
+## Rezerwowanie wizyt
+
+Zalogowany klient otwiera panel i wybiera usługę, pracownika oraz datę. System pokazuje wyłącznie przyszłe godziny zgodne z grafikiem pracownika, czasem trwania usługi i istniejącymi rezerwacjami. Jednorazowe godziny dostępności dla wybranego dnia zastępują grafik tygodniowy. Klient wybiera termin, może dodać uwagi i potwierdza rezerwację; zapis trafia do panelu jako oczekujący na potwierdzenie. Przy zapisie dostępność jest ponownie sprawdzana, aby odrzucić termin zajęty w międzyczasie.
+
+Rezerwacje rozpoczynają się co 30 minut w ramach godzin dostępności. Ta funkcja korzysta z istniejących tabel `employee_availability` i `reservations`; nie zmienia schematu bazy i nie wymaga migracji.
